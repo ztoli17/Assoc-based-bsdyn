@@ -519,7 +519,7 @@ def run_bsdyn_simulation(N, k, iters, penalties, dirname, tca_power, max_iters=1
                     if i % 10000 == 0:
                         partitions.append(partition)
                         print(f'Finished with iteration {i}')
-                    test_network.communication()
+                test_network.communication()
 
             DIRECTORY_NAME = dirname + f"\soc_inc_{soc_incr_ampl}_dissonance_penalty_{penalty}_bs_size{k}_const_beliefs_{num_const_beliefs}_num_agents_{N}_iter_{iteration}"
             exists = os.path.exists(DIRECTORY_NAME)
