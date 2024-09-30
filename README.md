@@ -28,3 +28,24 @@ Optional:
 * bs_thresh: Tolerance range within which we accept the fluctuations in the normalized subgroup belief homogeneities. Default value: 0.05
 
 The exact values used for our simulations can be found in our article. Please consult them as guidelines if you want to try new parameter sets.
+
+## Results
+
+The results produced by the program are placed in the specified directory. It consists of a figure of the final partition of the social network, and a pickled dictionary containing additional information.
+
+The dictionary fields are the following:
+* Modularities: List of calculated modularities every 100th iteration step
+* Num_communities: List containing the number of communities in the SN every 100th iteration step
+* Num_edges: List containing the number of existing edges in the SN every 100th iteraton step
+* Sum_edges: List containing the total edge weights in the SN every 100th iteration step
+* Homogeneities_total: List containing the attitude homogeneities calculated on the whole social network every 100th iteration step
+* Subgroup_avg_homogeneities: List containing the average attitude homogeneities calculated in the communities every 100th iteration step
+* Bs_weight_homogenities: List containing the belief system homogeneities calculated on the whole social network every 100th iteration step
+* Subgroup_avg_bs_weight_homogenities: List containing the average belief system homogeneities calculated in the communities every 100th iteration step
+* Extremism: List containing the average extremism of the agents every 100th iteration step
+* Group_sizes: List containing lists of the community sizes every 100th iteration step
+* Largest_component_ratios: List containing the ratio of the largest connected component and the total nodes in the social network every 100th iteration step
+* Component_list: List of lists containing the sizes of connected components in the social network every 100th iteration step
+* Final_bss: List containing the belief system arrays of each agent at the last iteration step
+* Comm_counters: List containing the communication counter arrays of each agent at the last iteration step
+* Final_partition: igraph VertexClustering object of the last partition detected by the Leiden algorithm
