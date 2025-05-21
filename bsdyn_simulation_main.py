@@ -65,8 +65,8 @@ class Agent:
             for pos in self.const_positive_nodes:
                 attitude_list[pos] = 1
         else:
-            assoc_mtx = starting_assoc_mtx.copy()
-            attitude_list = starting_attitudes
+            assoc_mtx = starting_assoc_mtx[:, :]
+            attitude_list = np.array([i for i in starting_attitudes], dtype=float64)
         self.assoc_mtx = assoc_mtx
         self.assoc_sum = assoc_mtx.sum()
         self.attitude_list = attitude_list
@@ -112,7 +112,7 @@ class Agent:
                         self.attitude_list[concept_random] = 1
                     self.coherency_level = self.calculate_coherency_level()
                     coherence_diff = self.coherency_level - starting_coherency
-                    if np.exp(coherence_diff / temperature * (i + 1)) > np.random.random():
+                    if np.exp(coherence_diff / temperature) > np.random.random():
                         starting_attitudes = self.attitude_list.copy()
                         starting_coherency = self.coherency_level
                     else:
@@ -135,9 +135,9 @@ class Agent:
                     self.attitude_list[concept_id] = -1
                 elif self.attitude_list[concept_id] > 1:
                     self.attitude_list[concept_id] = 1
-                self.coherency_level = self.calculate_coherency_level()  # újrakalkuláljuk a koherenciaszintet az új attitude-okkal
+                self.coherency_level = self.calculate_coherency_level()
                 coherence_diff = self.coherency_level - starting_coherency
-                if np.exp(coherence_diff / temperature * (i + 1)) > np.random.random():
+                if np.exp(coherence_diff / temperature) > np.random.random():
                     starting_attitudes = self.attitude_list.copy()
                     starting_coherency = self.coherency_level
                 else:
@@ -191,7 +191,7 @@ class SocialNetwork:
 
     def sn_gen(self):
         """
-        Szociális háló előállítása
+        Creating social network
         """
         soc_nw = np.random.uniform(low=1e-15, high=1.0, size=(self.sn_size, self.sn_size))
         np.fill_diagonal(soc_nw, 0)
@@ -205,7 +205,7 @@ class SocialNetwork:
 
     def agent_gen(self):
         """
-        Ügynökök listájának előállítása
+        Create list of agents
         """
         agent_list = typed.List([Agent(self.bs_size, self.dissonance_penalty, self.const_negative_nodes,
                                        self.const_positive_nodes, self.temperature, self.max_stab,
@@ -296,6 +296,7 @@ class SocialNetwork:
             self.soc_nw[j, i] = 0
         elif self.soc_nw[j, i] > 1:
             self.soc_nw[j, i] = 1
+        return i, j # for potential debugging purposes
 
 
 def get_modularity(network: np.array):
@@ -439,6 +440,7 @@ def check_convergence(edge_weights, subgroup_bs_weights, conv_count, social_netw
     return conv_count
 
 
+
 def run_bsdyn_simulation(N, k, iters, penalties, dirname, tca_power, max_iters=10000000, agent_max_stab=10,
                          soc_incr_ampl=1,
                          attitude_change_ampl=1,
@@ -468,88 +470,113 @@ def run_bsdyn_simulation(N, k, iters, penalties, dirname, tca_power, max_iters=1
     """
     for iteration in range(iters):
         for penalty in penalties:
-            const_neg_beliefs = [k - num_const_beliefs * 2 + i for i in range(num_const_beliefs)]
-            const_pos_beliefs = [k - num_const_beliefs + i for i in range(num_const_beliefs)]
-            test_network = SocialNetwork(N, k, np.array(const_neg_beliefs, dtype=np.int64),
-                                         np.array(const_pos_beliefs, dtype=np.int64),
-                                         temperature, penalty, use_clones, attitude_change_ampl, soc_incr_ampl,
-                                         assoc_incr_ampl, agent_max_stab, tca_power,
-                                         )
+            for tca_pow in tca_power:
+                const_neg_beliefs = [k - num_const_beliefs * 2 + i for i in range(num_const_beliefs)]
+                const_pos_beliefs = [k - num_const_beliefs + i for i in range(num_const_beliefs)]
+                test_network = SocialNetwork(N, k, np.array(const_neg_beliefs, dtype=np.int64),
+                                             np.array(const_pos_beliefs, dtype=np.int64),
+                                             temperature, penalty, use_clones, attitude_change_ampl, soc_incr_ampl,
+                                             assoc_incr_ampl, agent_max_stab, tca_pow,
+                                             )
 
-            modularities = []
-            num_communities = []
-            bs_weight_homogenities = []
-            subgroup_bs_weight_homogenities = []
-            partitions = []
-            num_edges = []
-            sum_edge_weights = []
-            homogenities = []
-            subgroup_homogenities = []
-            largest_component_ratios = []
-            components = []
-            extremism = []
-            group_sizes = []
-            conv_count = 0
-            for i in range(max_iters):
-                if i % 100 == 0:
-                    index = int((i - 1) / 100)
-                    modularity, partition, largest_ratio, component_list = get_modularity(test_network.soc_nw)
-                    modularities.append(modularity)
-                    largest_component_ratios.append(largest_ratio)
-                    components.append(component_list)
-                    num_communities.append(len(partition.sizes()))
-                    num_edges.append(np.count_nonzero(test_network.soc_nw))
-                    sum_edge_weights.append(np.sum(test_network.soc_nw))
-                    homogenities.append(get_group_homogenity(test_network.agent_list, N))
-                    if i < 1 and test_network.use_clones:
-                        assert homogenities[0] == 1.0
-                    subgroup_homogenities.append(
-                        get_average_subgroup_homogenity(test_network.agent_list, partition.membership))
-                    bs_weight_homogenities.append(get_bs_weight_homogenity(test_network.agent_list))
-                    subgroup_bs_weight_homogenities.append(
-                        get_average_subgroup_bs_weight_homogenity(test_network.agent_list, partition.membership))
-                    extremism.append(calculate_extremism(test_network.agent_list))
-                    group_sizes.append(get_average_group_size(partition.membership))
-                    if i > convergence_start:
-                        conv_count = check_convergence(sum_edge_weights, bs_weight_homogenities, conv_count,
-                                                       test_network, edge_norm, edge_thresh, bs_thresh,
-                                                       int(convergence_start / 100))
-                        if conv_count >= convergence_end:
-                            break
-                    if i % 10000 == 0:
-                        partitions.append(partition)
-                        print(f'Finished with iteration {i}')
-                test_network.communication()
+                modularities = []
+                num_communities = []
+                bs_weight_homogenities = []
+                subgroup_bs_weight_homogenities = []
+                partitions = []
+                num_edges = []
+                sum_edge_weights = []
+                homogenities = []
+                subgroup_homogenities = []
+                largest_component_ratios = []
+                components = []
+                extremism = []
+                group_sizes = []
+                conv_count = 0
+                for i in range(max_iters):
+                    if i % 100 == 0:
+                        index = int((i - 1) / 100)
+                        modularity, partition, largest_ratio, component_list = get_modularity(test_network.soc_nw)
+                        modularities.append(modularity)
+                        largest_component_ratios.append(largest_ratio)
+                        components.append(component_list)
+                        num_communities.append(len(partition.sizes()))
+                        num_edges.append(np.count_nonzero(test_network.soc_nw))
+                        sum_edge_weights.append(np.sum(test_network.soc_nw))
+                        homogenities.append(get_group_homogenity(test_network.agent_list, N))
+                        if i < 1 and test_network.use_clones:
+                            assert homogenities[0] == 1.0
+                        subgroup_homogenities.append(
+                            get_average_subgroup_homogenity(test_network.agent_list, partition.membership))
+                        bs_weight_homogenities.append(get_bs_weight_homogenity(test_network.agent_list))
+                        subgroup_bs_weight_homogenities.append(
+                            get_average_subgroup_bs_weight_homogenity(test_network.agent_list, partition.membership))
+                        extremism.append(calculate_extremism(test_network.agent_list))
+                        group_sizes.append(get_average_group_size(partition.membership))
+                        if i > convergence_start:
+                            conv_count = check_convergence(sum_edge_weights, bs_weight_homogenities, conv_count,
+                                                           test_network, edge_norm, edge_thresh, bs_thresh,
+                                                           int(convergence_start / 100))
+                            if conv_count >= convergence_end:
+                                break
+                        if i % 10000 == 0:
+                            partitions.append(partition)
+                            print(f'Finished with iteration {i}')
+                    test_network.communication()
 
-            DIRECTORY_NAME = dirname + f"\soc_inc_{soc_incr_ampl}_dissonance_penalty_{penalty}_bs_size{k}_const_beliefs_{num_const_beliefs}_num_agents_{N}_iter_{iteration}"
-            exists = os.path.exists(DIRECTORY_NAME)
+                DIRECTORY_NAME = dirname + f"\soc_inc_{soc_incr_ampl}_dissonance_penalty_{penalty}_bs_size{k}_const_beliefs_{num_const_beliefs}_num_agents_{N}_iter_{iteration}"
+                exists = os.path.exists(DIRECTORY_NAME)
 
-            if not exists:
-                os.makedirs(DIRECTORY_NAME)
+                if not exists:
+                    os.makedirs(DIRECTORY_NAME)
 
-            nonzeros = []
-            for elem in np.array([agent.assoc_mtx.flatten() for agent in test_network.agent_list]).flatten():
-                if elem != 0:
-                    nonzeros.append(elem)
+                nonzeros = []
+                for elem in np.array([agent.assoc_mtx.flatten() for agent in test_network.agent_list]).flatten():
+                    if elem != 0:
+                        nonzeros.append(elem)
 
-            results_dict = {"Modularities": modularities,
-                            "Num_communities": num_communities,
-                            "Num_edges": num_edges,
-                            "Sum_edges": sum_edge_weights,
-                            "Homogenities_total": homogenities,
-                            "Subgroup_avg_homogenities": subgroup_homogenities,
-                            "Bs_weight_homogenities": bs_weight_homogenities,
-                            "Subgroup_avg_bs_weight_homogenities": subgroup_bs_weight_homogenities,
-                            "Extremism": extremism,
-                            "Group_sizes": group_sizes,
-                            "Largest_component_ratios": largest_component_ratios,
-                            "Component_list": components,
-                            "Final_bss": [agent.assoc_mtx for agent in test_network.agent_list],
-                            "Comm_counters": [a.comm_counter for a in test_network.agent_list],
-                            "Final_Partition": partition,
-                            }
+                results_dict = {"Modularities": modularities,
+                                "Num_communities": num_communities,
+                                "Num_edges": num_edges,
+                                "Sum_edges": sum_edge_weights,
+                                "Homogenities_total": homogenities,
+                                "Subgroup_avg_homogenities": subgroup_homogenities,
+                                "Bs_weight_homogenities": bs_weight_homogenities,
+                                "Subgroup_avg_bs_weight_homogenities": subgroup_bs_weight_homogenities,
+                                "Extremism": extremism,
+                                "Group_sizes": group_sizes,
+                                "Largest_component_ratios": largest_component_ratios,
+                                "Component_list": components,
+                                "Final_bss": [agent.assoc_mtx for agent in test_network.agent_list],
+                                "Comm_counters": [a.comm_counter for a in test_network.agent_list],
+                                "Final_Partition": partition,
+                                }
 
-            with open(f"{DIRECTORY_NAME}/results.pkl", "wb") as file:
-                pickle.dump(results_dict, file)
+                with open(f"{DIRECTORY_NAME}/results.pkl", "wb") as file:
+                    pickle.dump(results_dict, file)
 
-            ig.plot(partition, f"{DIRECTORY_NAME}/igraph_plot.pdf", bbox=(600, 600), margin=40)
+                ig.plot(partition, f"{DIRECTORY_NAME}/igraph_plot.pdf", bbox=(600, 600), margin=40)
+
+# Example usage:
+# if __name__ == "__main__":
+#     run_bsdyn_simulation(
+#         N=100,
+#         k=10,
+#         iters=1,
+#         penalties=[3],
+#         dirname="result_path",
+#         tca_power=[4],
+#         max_iters=2000000,
+#         agent_max_stab=10,
+#         soc_incr_ampl=1,
+#         attitude_change_ampl=1,
+#         assoc_incr_ampl=1,
+#         num_const_beliefs=1,
+#         temperature=0.01,
+#         use_clones=True,
+#         convergence_start=200000,
+#         convergence_end=200,
+#         edge_norm=1000,
+#         edge_thresh=0.001,
+#         bs_thresh=0.05,
+#     )
